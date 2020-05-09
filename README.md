@@ -57,6 +57,3 @@ China Mobile (CHL)
 T-Mobile (TMUS)
 
 Verizon Communications (VZ)
-
-
-testing

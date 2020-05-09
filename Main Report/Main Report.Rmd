@@ -1,0 +1,451 @@
+---
+title: "Using Geometric Brownian Motion Model to Predict Future Stock Prices"
+author: "Liew Fu Teck A0167014M"
+output: pdf_document
+fontsize: 11pt
+linestretch: 1.25
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(fig.width=12, fig.height=6) 
+```
+
+# Introduction
+
+The geometric Brownian motion model is often used to build a statistical model when modelling the financial market. It is the most widely used model of stock price behaviour. In this course project, we attempt to model the stock return of a chosen stock on the financial market using the geometric Brownian motion model, and compare it against the actual stock return to ascertain if the model is a good fit.   
+
+
+# Problem of Interest & Methodology
+
+We are interested in finding the return of the stock price $S_t$, given any $S_i$ for $i = 0,1,2...,i-1$, where $S_i$ is defined as the stock closing price at the end of the $i^{th}$ trading period. Under the geometric Brownian motion model, the analytical solution of the geometric Brownian motion model can be expressed as $$S_t = S_0exp((\mu - \frac{\sigma^2}{2})t + \sigma B_t)$$
+where $B_t$ is a Brownian motion.
+
+From the above equation, we note that given the two constants $\mu$ and $\sigma$,  we are able to produce a geometric Brownian motion model through the corresponding time interval.
+
+The geometric Brownian motion model is preferred due to the following reasons:
+
+* The model only assumes positive values (stock price at any given time is positive)
+
+* Expected returns of the model are independent of stock prices at each time point
+
+However, there are also some disadvantages to using this model.
+
+* Stock price volatility tends to change over time, but volatility is assumed constant (constant $\sigma$) under the model.
+
+* Stock prices often show sharp jumps / dips due to unpredictable events or news, but path is continuous under the model.
+
+The second disadvantage is particularly hard to overcome, without incorporation of market sentiment through financial news into the statistical model. Hence, we will choose a stock and a corresponding time period unlikely to encounter major financial updates (eg. release of end-of-year financial results) that may affect stock prices to a large extent.
+
+
+# Data Collection
+For data collection of this model, we will select a blue chip stock. Blue chip stocks are stocks that belong to large companies that have been in operation for a long period of time, and the companies are often dominant leaders in their respective industries. Stock prices of blue-chip comapnies are not as volatile as compared to smaller companies, and are less likely to be affected by financial news which might otherwise cause large deviations in stock prices of smaller companies. In this case, we will be using Microsoft for our primary analysis.
+
+In view of the COVID-19 situation which has caused the stock prices of many companies to be unstable in recent months, we will be excluding the analysis of stock prices in 2020. Taking these considerations into account, we will be fitting Microsoft's stock across a 6 month period from 3rd June 2019 to 29th November 2019, to simulate the stock price in the month of December and come up with a stock price prediction on 31st December 2019 . 
+
+The data is collected from Yahoo Finance and downloaded into a spreadsheet, containing information such as the daily opening, closing, highest and lowest stock prices. For our project, we will be using the daily closing price for our analysis.
+
+We can first plot the stock price for this time period to see the general trend of the stock price to ensure that there are no points of sharp and sudden movement (usually attributed to financial news), since the geometric Brownian motion model is unable to model these effects. From the graph below, we see that this assumption is fulfilled.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+
+library(ggplot2)
+set.seed(4238)
+msft = read.csv("C:/Users/futeck/Desktop/ST4238 project/20 Companies/Technology/MSFT.csv", header = TRUE)
+msft = msft[c(36:183),]
+msft["Time Interval"] = c(1:nrow(msft))
+ggplot(data=msft,aes(x=msft$"Time Interval",y=msft$Close))+
+  ggtitle("Figure 1: Microsoft Stock Price Trend")+
+  geom_line() +xlab("Time Interval") + ylab("Closing Price") +
+  theme(plot.margin = unit(c(1,1,1,1),"cm"), text = element_text(size=15))
+
+```
+
+We also need to check 2 other assumptions. They are:
+
+* Daily stock returns (change in stock price when compared to previous day) are normally distributed.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+#Daily change should be normally distributed.
+par(mfrow=c(1,2))
+msft['Daily Stock Return'] <- 0
+msft$'Daily Stock Return' = (msft$Close - msft$Open)/msft$Open 
+hist(msft$'Daily Stock Return'*100, freq =FALSE, main = "Figure 2: Microsoft's Daily Return", xlab = "Daily Percentage Change")
+xpt <- seq(-4,4,0.1)
+ypt <- dnorm(xpt,mean(msft$'Daily Stock Return')*100, sd(msft$'Daily Stock Return')*100)
+lines(xpt, ypt)
+qqnorm(msft$'Daily Stock Return', main = "Figure 3: Normal Q-Q Plot")
+qqline(msft$'Daily Stock Return')
+```
+
+```{r include=FALSE, message=FALSE, warning=FALSE}
+S_0 = msft$Close[127]
+#We need to calculate annualized volatility for the sigma parameter
+msft['Daily Change'] <- 0
+for (i in 2:nrow(msft)){
+  msft$'Daily Change'[i-1] = (msft$Close[i] - msft$Close[i-1])/msft$Close[i-1]
+}
+sd_model = sd(msft$'Daily Change'[1:127])
+sd_model_output = format(round(sd_model,4), nsmall = 4)
+
+```
+
+\newpage
+* Simulated price levels on 31st December 2019 are log-normally distributed.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+library(sde)
+par(mfrow=c(1,2))
+S_t <- GBM(S_0,r=0,sigma=sd_model,T=30,N=1000)
+plot(seq(0,1000,by=1),S_t,type="l", main = "Figure 4: Microsoft Sample GBM", xlab = "Number of Simulations", ylab = "Stock Price")
+final_stock_price = numeric(100)
+for (i in 1:100){
+  S_t <- GBM(S_0,r=0,sigma=sd_model,T=30,N=1000)
+  final_stock_price[i] = S_t[length(S_t)]
+}
+
+hist(final_stock_price, main = "Figure 5: Histogram GBM Simulations", freq = F, xlab = "Stock Price")
+```
+
+From the Q-Q plots (see Appendix for explanation on Q-Q plots) and histograms, we see that the 2 assumptions are generally satisfied. Hence, we can proceed to use the geometric Brownian motion model to conduct our analysis.
+
+
+# Problem of Interest
+As a baseline, we first investigate if a geometric Brownian motion model with no drift (i.e $\mu$ = 0) is a good model for the stock price of Microsoft, taking the volatility $\sigma$ to be the annualized volatility of the Microsoft stock based on historical data.
+```{r include=FALSE}
+#From the histogram, we see that it follows a lognormal distribution. To find the corresponding 95% CI, we first take the log of the final stock price.
+
+log_fsp = log(final_stock_price)
+avg_log_fsp = mean(log_fsp)
+sd_log_fsp = sd(log_fsp)/sqrt(length(log_fsp))
+lower_log_fsp = mean(log_fsp) - qnorm(0.975)*sd_log_fsp
+upper_log_fsp = mean(log_fsp) + qnorm(0.975)*sd_log_fsp
+lower_fsp = exp(lower_log_fsp)
+upper_fsp = exp(upper_log_fsp)
+lower_fsp_output = format(round(lower_fsp,2), nsmall = 2)
+upper_fsp_output = format(round(upper_fsp,2), nsmall = 2)
+
+#We see that this is not a very good estimate, from actual $157.70. Hence, we can try to input the values of our drift rate and sigma and retry the GBM model simulation.
+```
+
+Given that the simulated stock prices on 31st December follow a lognormal distribution, we take the natural log of all the simulations to calculate the corresponding 95% CI. The 95% CI is given as (`r lower_fsp_output`, `r upper_fsp_output`). Given that the actual Microsoft stock price (157.70) is not within this 95% CI, we see that a geometric Brownian motion model with no drift is not a good model to model the movement of stock prices. This is a reasonable finding, since stock prices encounter strong drift following financial news, especially bad news ^[Chan, Wesley. (2003). Stock Price Reaction to News and No-News: Drift and Reversal after Headlines. Journal of Financial Economics. 70. 223-260. 10.1016/S0304-405X(03)00146-6. ]. Given that our model is unable to capture the effect of financial news in the real world, it is therefore essential to account for drift in such a non-stationary process.
+
+```{r include=FALSE}
+
+#Given that our test data is over a period of 6 months (0.5 years), our tau = 0.5
+#We first find u_i, our log of daily return on stock
+msft['u'] <- 0
+for (i in 2:127){
+  msft$u[i] = log(msft$Close[i]/msft$Close[i-1]) 
+}
+u_bar = sum(msft$u)/126
+
+v = numeric(126)
+for (i in 2:127){
+  v[i-1] = msft$u[i] - u_bar
+}
+v = sqrt(sum(v^2)/125)
+sigma_star = v/sqrt(0.5)
+
+drift = u_bar/0.5 + 0.5*(sigma_star)^2
+
+sigma_star_output = format(round(sigma_star,4),nsmall=4)
+drift_output = format(round(drift,5),nsmall=5)
+
+#With the sigma_star and drift values, we can then calculate again the corresponding CI.
+
+library(sde)
+S_0 = msft$Close[127]
+new_final_stock_price = numeric(100)
+S_t <- GBM(S_0,r=drift,sigma=sigma_star,T=30,N=1000)
+new_final_stock_price[1] = S_t[length(S_t)]
+plot(seq(0,1000,by=1),S_t,type="l", main = "Geometric Brownian Motion Simulation of Microsoft Stock Price with Updated Parameters")
+for (i in 2:100){
+  S_t <- GBM(S_0,r=drift,sigma=sigma_star,T=30,N=1000)
+  lines(seq(0,1000,by=1),S_t,type="l")
+  new_final_stock_price[i] = S_t[length(S_t)]
+}
+hist(new_final_stock_price)
+
+#Again, this is lognormal so we can normalize it to find the corresponding CI.
+
+new_log_fsp = log(new_final_stock_price)
+new_avg_log_fsp = mean(new_log_fsp)
+new_sd_log_fsp = sd(new_log_fsp)/sqrt(length(new_log_fsp))
+new_lower_log_fsp = mean(new_log_fsp) - qnorm(0.975)*new_sd_log_fsp
+new_upper_log_fsp = mean(new_log_fsp) + qnorm(0.975)*new_sd_log_fsp
+new_lower_fsp = exp(new_lower_log_fsp)
+new_upper_fsp = exp(new_upper_log_fsp)
+new_lower_fsp_output = format(round(new_lower_fsp,2),nsmall = 2)
+new_upper_fsp_output = format(round(new_upper_fsp,2),nsmall = 2)
+```
+
+
+We investigate if a geometric Brownian motion model with drift is a better model. To do so, we go back to the definition and formula to calculate estimated drift and volatility under the geometric Brownian motion model, using the stock price data from 3rd June to 29th November 2019.
+
+## Volatility
+We denote $S_i$ as the stock closing price at the end of $i^{th}$ trading period and $\tau$ as the length of time interval between two consecutive trading periods expressed in years, $\tau$ = $t_i$ - $t_{i-1}$, where i > 0.
+If $u_i$ is the logarithm of the daily return on the stock over the short time interval $\tau$ i.e. $$u_i = ln(\frac{S_i}{S_{i-1}})$$ for i = 1,2,....,n,
+then the unbiased estimtor $\bar{u}$ of the logarithm of the returns is given by:
+$$\bar{u} = \frac{1}{n} \sum_{i=1}^{n}{u_i}$$
+The estimator of the standard deviation of the $u_i$'s is then given by:
+$$v=\sqrt{\frac{1}{n-1}\sum_{i=1}^{n}({u_i-\bar{u}})^2}$$
+where $\bar{u}$ is the unbiased estimator of the logreturn $u_i$.
+We can then estimte $\sigma$ by:
+$$\sigma^* = \frac{v}{\sqrt{\tau}}$$
+with a standard error $\frac{\sigma^*}{\sqrt{2n}}$.
+
+## Drift
+Using the original geometric Brownian motion equation $S_t = S_0exp((\mu - \frac{\sigma^2}{2})t + \sigma B_t)$, we can obtain the drift $\mu$ as:
+$$\mu = \frac{\bar{u}}{\tau}+ \frac{1}{2}\sigma^2$$
+With the formula of the 2 parameters, we can now proceed to find a better estimate of the estimated Microsoft stock price on 31st December 2019 under the geometric Brownian motion model.
+
+From the formulae, we find that $\sigma^*$ = `r sigma_star_output` and $\mu$ = `r drift_output`. Hence, the updated geometric Brownian motion formula for Microsoft is given as:
+
+$$S_t = S_0exp((`r drift_output` - \frac{`r sigma_star_output`^2}{2})t + `r sigma_star_output` B_t)$$
+
+Running the geometric Brownian model simulation with the two updated parameters, we attain a corresponding 95% confidence interval of (`r new_lower_fsp_output`,`r new_upper_fsp_output`).
+
+However, we see that our 95% CI using the updated parameters also does not contain the actual stock price on 31st December as well. We conclude that the geometric Brownian motion model is not a good model to predict Microsoft's stock price.
+
+# Extension of Discussion
+Using the same framework as above, we explore the feasibility of using such a trading strategy to predict the stock prices of companies across different industries. The top 5 largest companies and their corresponding industries are shown in the following table.
+
+```{r echo=FALSE}
+library(knitr)
+tech_names = c("Apple","Microsoft","Amazon","Alphabet","Facebook")
+consumer_names = c("Coca-Cola","Nike","PepsiCo","Proctor & Gamble","Philip Morris")
+finance_names = c("Berkshire Hathaway", "Bank of America", "JP Morgan", "Visa", "Mastercard")
+healthcare_names= c("Abbott","Johnson & Johnson", "Merck & Co.", "Novartis", "Pfizer")
+telco_names = c("AT&T", "BCE Inc.", "China Mobile", "T-Mobile", "Verizon")
+
+x = data.frame(tech_names, consumer_names, finance_names, healthcare_names, telco_names)
+kable(x, caption = "Top 5 Companies across Different Sectors", col.names = c("Technology","Consumer Services","Finance","Healthcare","Telecommunications"))
+```
+
+
+These industries were chosen because companies within these industries were well-represented within the top percentile of stocks on the USA stock market, when filtered by market capitalization. We then filter for the top 5 companies in these 5 industries and aim to carry out the same geometric Brownian process on the same time period, and find the corresponding 95% confidence interval. 
+
+It is important to note that there may have been industry-specific financial news that may have affected the aforementioned 20 stocks in some way, which is a limitation of the geometric Brownian motion model as discussed earlier. However, we expect that the impact and fluctuations in stock prices for these stocks would not have been as large, in comparison to smaller companies within the same industry. 
+
+We note that the normality assumption is not well-satisfied for some companies, as seen from the Q-Q plots and histograms in the appendix. However, we relax these conditions for our extended discussion, as the main aim is to understand how well the geometric Brownian motion model can predict the stock price at a future time point for blue-chip companies in general. We then proceed to calculate the corresponding $\mu$, $\sigma^*$, 95% CI and compare it to the actual stock price of the companies on 31st December. 
+
+\newpage
+```{r echo=FALSE}
+tech_names = c("Apple","Microsoft","Amazon","Alphabet","Facebook")
+mu_tech = c(0.007093755,0.0038585618,0.001122726,0.00387072,0.003490901)
+mu_tech = format(round(mu_tech,4), nsmall=4)
+sigma_tech = c(0.02088993,0.01732382191,0.01673288,0.02052651,0.02124944)
+sigma_tech = format(round(sigma_tech,4), nsmall=4)
+tech_ci_without = c("(262.08,271.71)","(149.01,153.55)","(1773.79,1825.79)","(1279.70,1326.77)","(197.67,205.05)")
+tech_ci_with = c("(325.19,338.52)","(167.54,173.18)","(1839.81,1899.98)","(1442.10,1500.17)","(220.13,229.31)")
+tech_true = c(293.65,157.70,1847.84,1337.02,205.25)
+
+x = data.frame(tech_names,mu_tech,sigma_tech,tech_ci_without,tech_ci_with,tech_true)
+
+kable(x, caption = "Top 5 Companies in Technology Sector", col.names = c('Company Name','$\\mu$','$\\sigma^*$','95% CI without drift', '95% CI with drift', 'Actual Stock Price '))
+```
+
+*The corresponding tables for the other 4 industries and the respective companies are included in the appendix for brevity purposes.*
+
+From the 95% CIs and the stock prices, we observe a point worthy of mention.
+
+* Out of all 25 companies, we have 13 companies whose actual stock price lies between the upper bound of the 95% CI without drift and the lower bound of the 95% CI with drift. It is particularly interesting for the technological services and finance industry, as this is the case for 4 technological companies and all 5 finance companies. We may consider carrying out further analysis to ascertain if the formula for $\mu$ and $\sigma$ under the geometric Brownian motion model can be modified to better fit certain industry profiles. **However, this is out of the scope of the project and will not be discussed further.**
+
+We then do a comparison to see how many companies' stock prices have been correctly predicted using the geometric Brownian motion model with drift, and without drift.
+
+```{r echo=FALSE}
+industry = c("Technology","Consumer Services","Finance","Healthcare","Telecommunications")
+without_drift = c(0,1,0,0,1)
+with_drift = c(1,3,0,2,0)
+kable(data.frame(industry,without_drift, with_drift), caption = "Accuracy of Prediction of Stock Prices", col.names = c("Industry","GBM without drift", "GBM with drift"))
+```
+
+From table 3, we see that with the exception of the telecommunications industry, the geometric Brownian motion model with drift performed as well / outperformed the one without drift, in terms of predicting the stock price. However, the geometric Brownian model itself as a whole does not seem to predict stock prices very well, given its accuracy across all sectors.
+
+We now consider a different simulation approach, where we use the closing price data of last *n* data points and carry out a 1-stage geometric Brownian motion simulation to predict the stock price on 31st December 2019. In this case, we let n = 150 and calculate the parameters $\mu$ and $\sigma^*$ using the formulae discussed above. We exclude the calculation of the 95% CI without drift given its lack of usefulness as shown from our results above.
+
+```{r echo=FALSE}
+tech_names = c("Apple","Microsoft","Amazon","Alphabet","Facebook")
+mu_tech = c(0.0069,0.0033,0.00036,0.0026,0.0018)
+sigma_tech = c(0.0202,0.0169,0.0177,0.0207,0.0228)
+tech_ci_with = c("(292.81,295.17)","(157.79,158.84)","(1843.64,1856.60)","(1336.28,1347.32)","(204.21,206.06)")
+tech_true = c(293.65,157.70,1847.84,1337.02,205.25)
+
+x = data.frame(tech_names,mu_tech,sigma_tech,tech_ci_with,tech_true)
+
+kable(x, caption = "Top 5 Companies in Technology Sector", col.names = c('Company Name','$\\mu$','$\\sigma^*$','95% CI with drift', 'Actual Stock Price '))
+```
+
+*The corresponding tables for the other 4 industries and the respective companies are included in the appendix for brevity purposes.*
+
+We then check if there is any improvement in prediction as compared to the original geometric Brownian motion model with drift simulated over 6 months.
+
+```{r echo=FALSE}
+industry = c("Technology","Consumer Services","Finance","Healthcare","Telecommunications")
+with_drift_june = c(1,3,0,2,0)
+with_drift_one_day = c(4,3,5,3,5)
+kable(data.frame(industry,with_drift_june, with_drift_one_day), caption = "Accuracy of Prediction of Stock Prices", col.names = c("Industry","6 month simulation", "1 day simulation"))
+```
+
+From the above table, we can conclude that this 1-day simulation prediction has a much higher accuracy level.
+
+### Practical Usage
+Due to the lack of fluctuation that can take place in a single day as compared to 6 months, it might seem trivial to do a one-period simulation of geometric Brownian motion, considering that it is more likely that the stock price of the next day (in this case 31st December 2019) will fall within the 95% CI, as compared to a 6-month simulation period. However, a practical usage would be to utilise such an approach to create short-term investment strategies by investing in companies whose 95% CI of stock price is higher than the current market stock price, and update the CI daily based on the last n days to decide if any actions should be taken to maximise returns to investment (eg. to sell, to buy more).
+
+## Limitations & Improvements
+The analysis was done on the 25 companies under the assumption that their stock returns all follow a normal distribution. However, this does not hold true in real life. In reality, stock returns tend to be skewed towards a positive return in the long run^[Dierking, D. (2019). Benefits of Holding Stocks for the Long Term. Investopedia. Retrieved 24 April 2020, from https://www.investopedia.com/articles/investing/052216/4-benefits-holding-stocks-long-term.asp]. Furthermore, as discussed at the start of the report, the geometric Brownian model does not take the impact of financial news into account. This may impact the feasibility and accuracy of the geometric Brownian model even further, considering that the assumptions on which the model are based on are not fulfilled in the first place. Hence, the geometric Brownian motion model is an oversimplication in these regards.
+
+Based on our analyis, some areas to consider for follow-up include the use of varying time frames to predict the stock price. 
+
+1) In this report, we have only considered two separate time frames of 6-months and a 1-day simulation period. There might be other periods which give rise to a 95% CI of higher accuracy. 
+
+2) As discussed earlier, we can also consider the modification of parameters for different industries (using a bias) if we see an observable trend for the stock price and their respective 95% CIs across all / most companies in the particular industry. 
+
+3) We can also consider improving the accuracy of the geometric Brownian motion model by incorporating market sentiment, or modelling the parameters under the geometric Brownian model as a function of other macroeconomic factors (eg. market interest rate, consumer confidence etc.) 
+
+## Conclusion
+In this project, we modelled the stock price at a future point in time by considering the movement of stock prices as a stochastic process. From the comparison of the results and real-life data, we see that the geometric Brownian motion is not a good model to predict stock prices over a 6-month period, even though the assumptions required to use the model are largely met for the datasets (companies) for this project. However, its accuracy is improved when modelled over a shorter time period (1 day).
+
+
+
+\newpage
+# Appendix
+
+## Explanation of Q-Q plots
+Q-Q plots are scatterplots created by plotting two sets of quantiles against one another. If both sets of quantiles came from the same distribution, we expect to see the points falling on a straight line. In the report, we are plotting a Normal Q-Q plot, to ascertain if the daily stock returns for the companies follow a normal distribution. For example, the following Q-Q plot is derived from a N(0,1) distribution using the **rnorm** function.
+
+```{r echo=FALSE, out.width="70%", fig.align="center"}
+x <- rnorm(100)
+qqnorm(x)
+qqline(x)
+```
+
+## References
+
+* Ross, Sheldon M. Introduction to Probability Models. Academic Press, 2019.
+
+* Chan, Wesley. (2003). Stock Price Reaction to News and No-News: Drift and Reversal after Headlines. Journal of Financial Economics. 70. 223-260. 10.1016/S0304-405X(03)00146-6. 
+
+* Dierking, D. (2019). Benefits of Holding Stocks for the Long Term. Investopedia. Retrieved 24 April 2020, from https://www.investopedia.com/articles/investing/052216/4-benefits-holding-stocks-long-term.asp
+
+* Yang, Zhiyun. Geometric Brownian Motion Model in Financial Market
+
+* Dmouj, Abdelmoula. Stock Price Modelling: Theory and Practice
+
+
+\newpage
+
+## Calculations of $\mu$, $\sigma^*$ and 95% CI based on geometric Brownian motion model with / without drift
+
+
+```{r echo=FALSE}
+cons_names=c("Coca-Cola","Nike","PepsiCo","Proctor & Gamble","Philip Morris")
+mu_cons=c(0.0012,0.0031,0.00091,0.0027,0.0011)
+sigma_cons=c(0.0146,0.0199,0.0130,0.0161,0.0242)
+cons_ci_without=c("(52.71,54.06)","(91.78,94.99)","(134.30,137.34)","(120.31,123.70)","(81.03,84.48)")
+cons_ci_with=c("(54.72,56.28)","(100.96,104.91)","(138.35,141.86)","(130.83,134.95)","(84.08,88.09)")
+cons_true=c(55.35,101.31,136.67,124.9,85.09)
+
+x = data.frame(cons_names,mu_cons,sigma_cons,cons_ci_without,cons_ci_with,cons_true)
+
+kable(x, caption = "Top 5 Companies in Consumer Services Sector", col.names = c('Company Name','$\\mu$','$\\sigma^*$','95% CI without drift', '95% CI with drift', 'Actual Stock Price '))
+```
+
+```{r echo=FALSE}
+fin_names=c("Berkshire Hathaway", "Bank of America", "JP Morgan", "Visa", "Mastercard")
+mu_fin=c(0.0017,0.0037,0.0035,0.0026,0.0032)
+sigma_fin=c(0.0123,0.0207,0.0173,0.0176,0.0211)
+fin_ci_without=c("(217.97,222.62)","(32.68,33.87)","(129.71,133.64)","(181.59,187.18)","(286.50,297.16)")
+fin_ci_with=c("(230.11,235.60)","(36.67,38.16)","(144.63,149.52)","(196.63,203.38)","(316.30,329.40)")
+fin_true=c(226.5,35.22,139.4,187.9,298.59)
+
+x = data.frame(fin_names,mu_fin,sigma_fin,fin_ci_without,fin_ci_with,fin_true)
+
+kable(x, caption = "Top 5 Companies in Financial Services Sector", col.names = c('Company Name','$\\mu$','$\\sigma^*$','95% CI without drift', '95% CI with drift', 'Actual Stock Price '))
+```
+
+```{r echo=FALSE}
+health_names = c("Abbott","Johnson & Johnson","Merck & Co.","Novartis","Pfizer")
+mu_health = c(0.002073321,0.0008601708,0.001470097,0.0009162137,-0.00117719)
+mu_health = format(round(mu_health,4), nsmall=4)
+sigma_health = c(0.01745568,0.0170806,0.01773934,0.01396484,0.01818987)
+sigma_health = format(round(sigma_health,4), nsmall=4)
+health_ci_without = c("(84.11,86.68)","(135.40,139.41)","(85.79,88.44)","(91.17,93.40)","(37.89,39.09)")
+health_ci_with = c("(89.76,92.83)","(139.32,143.97)","(89.91,93.03)","(93.96,96.52)","(36.68,37.98)")
+health_true = c(86.86,145.87,90.95,94.69,39.18)
+
+x = data.frame(health_names,mu_health,sigma_health,health_ci_without,health_ci_with,health_true)
+
+kable(x, caption = "Top 5 Companies in Healthcare Sector", col.names = c('Company Name','$\\mu$','$\\sigma^*$','95% CI without drift', '95% CI with drift', 'Actual Stock Price '))
+```
+
+\newpage
+
+```{r echo=FALSE}
+telco_names=c("AT&T", "BCE Inc.", "China Mobile", "T-Mobile", "Verizon")
+mu_telco=c(0.0031,0.0010,-0.0026,0.0011,0.0011)
+sigma_telco=c(0.0165,0.0116,0.0155,0.0185,0.0125)
+telco_ci_without=c("(36.83,37.89)","(47.60,48.55)","(37.21,38.22)","(77.22,79.74)","(59.59,60.88)")
+telco_ci_with=c("(40.49,41.79)","(49.11,50.22)","(34.49,35.54)","(79.99,82.89)","(61.80,63.30)")
+telco_true=c(39.08,46.35,42.27,78.42,61.4)
+
+x = data.frame(telco_names,mu_telco,sigma_telco,telco_ci_without,telco_ci_with,telco_true)
+
+kable(x, caption = "Top 5 Companies in Telecommunications Services Sector", col.names = c('Company Name','$\\mu$','$\\sigma^*$','95% CI without drift', '95% CI with drift', 'Actual Stock Price '))
+```
+
+
+
+\newpage
+## Calculations of $\mu$, $\sigma^*$ and 95% CI based on geometric Brownian motion model with drift based on increment of 1 period
+
+
+```{r echo=FALSE}
+cons_names=c("Coca-Cola","Nike","PepsiCo","Proctor & Gamble","Philip Morris")
+mu_cons=c(0.0018,0.0035,0.0010,0.0025,0.0010)
+sigma_cons=c(0.0139,0.0192,0.0124,0.0155,0.0231)
+cons_ci_with=c("(55.28,55.59)","(100.92,101.69)","(136.74,137.42)","(124.55,125.32)","(85.54,86.33)")
+cons_true=c(55.35,101.31,136.67,124.9,85.09)
+
+x = data.frame(cons_names,mu_cons,sigma_cons,cons_ci_with,cons_true)
+
+kable(x, caption = "Top 5 Companies in Consumer Services Sector", col.names = c('Company Name','$\\mu$','$\\sigma^*$', '95% CI with drift', 'Actual Stock Price '))
+```
+
+```{r echo=FALSE}
+fin_names=c("Berkshire Hathaway", "Bank of America", "JP Morgan", "Visa", "Mastercard")
+mu_fin=c(0.0018,0.0034,0.0035,0.0024,0.0021)
+sigma_fin=c(0.0118,0.0201,0.0168,0.0203,0.0167)
+fin_ci_with=c("(225.85,226.92)","(35.18,35.46)","(138.83,139.76)","(187.84,189.09)","(297.69,300.10)")
+fin_true=c(226.5,35.22,139.4,187.9,298.59)
+
+x = data.frame(fin_names,mu_fin,sigma_fin,fin_ci_with,fin_true)
+
+kable(x, caption = "Top 5 Companies in Financial Services Sector", col.names = c('Company Name','$\\mu$','$\\sigma^*$', '95% CI with drift', 'Actual Stock Price '))
+```
+
+```{r echo=FALSE}
+health_names = c("Abbott","Johnson & Johnson","Merck & Co.","Novartis","Pfizer")
+mu_health = c(0.0020,0.0015,0.0020,0.0014,-0.00079)
+sigma_health = c(0.0166,0.0161,0.0167,0.0134,0.0172)
+health_ci_with = c("(86.80,87.37)","(145.24,146.17)","(91.03,91.63)","(94.53,95.03)","(38.80,39.06)")
+health_true = c(86.86,145.87,90.95,94.69,39.18)
+
+x = data.frame(health_names,mu_health,sigma_health,health_ci_with,health_true)
+
+kable(x, caption = "Top 5 Companies in Healthcare Sector", col.names = c('Company Name','$\\mu$','$\\sigma^*$', '95% CI with drift', 'Actual Stock Price '))
+```
+
+\newpage
+```{r echo=FALSE}
+telco_names=c("AT&T", "BCE Inc.", "China Mobile", "T-Mobile", "Verizon")
+mu_telco=c(0.0028,0.00035,-0.00061,0.00051,0.00078)
+sigma_telco=c(0.0162,0.0118,0.0155,0.0182,0.0140)
+telco_ci_with=c("(39.08,39.33)","(46.19,46.41)","(42.09,42.35)","(77.95,78.51)","(61.16,61.50)")
+telco_true=c(39.08,46.35,42.27,78.42,61.4)
+
+x = data.frame(telco_names,mu_telco,sigma_telco,telco_ci_with,telco_true)
+
+kable(x, caption = "Top 5 Companies in Telecommunications Services Sector", col.names = c('Company Name','$\\mu$','$\\sigma^*$', '95% CI with drift', 'Actual Stock Price '))
+```
