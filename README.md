@@ -2,6 +2,8 @@
 For this project, we use a Geometric Brownian Motion Model to simulate stock prices for 25 companies (5 companies across 5 industries).
 We first simulate with zero drift as a baseline, then improve the model by simulating over a period of 6 months. Finally, we consider simulating based the last n (n>0) days and continually updating our 95% confidence interval.
 
+For full report on methodology, analysis and results, see "Main Report".
+
 ## List of Datasets (Company Names + Stock Symbol)
 ### Technology
 Microsoft (MSFT)
