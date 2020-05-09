@@ -1,6 +1,6 @@
 # Stock Price GBM
 For this project, we use a Geometric Brownian Motion Model to simulate stock prices for 25 companies (5 companies across 5 industries).
-We first simulate with zero drift as a baseline, then improve the model by simulating over a period of 6 months. Finally, we consider simulating based the last n (n>0) days and continually updating our 95% confidence interval.
+We first simulate with zero drift as a baseline, then improve the model by simulating over a period of 6 months. We also consider a separate approach, namely simulating based the last n days and continually updating our 95% confidence interval. In our case, we let n = 150.
 
 For full report on methodology, analysis and results, see "Main Report".
 
