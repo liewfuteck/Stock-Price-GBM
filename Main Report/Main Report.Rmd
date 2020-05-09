@@ -1,6 +1,6 @@
 ---
 title: "Using Geometric Brownian Motion Model to Predict Future Stock Prices"
-author: "Liew Fu Teck A0167014M"
+author: "Liew Fu Teck"
 output: pdf_document
 fontsize: 11pt
 linestretch: 1.25
@@ -51,7 +51,7 @@ We can first plot the stock price for this time period to see the general trend 
 
 library(ggplot2)
 set.seed(4238)
-msft = read.csv("C:/Users/futeck/Desktop/ST4238 project/20 Companies/Technology/MSFT.csv", header = TRUE)
+msft = read.csv("D:/GBM Project/For Github/Datasets/MSFT.csv", header = TRUE)
 msft = msft[c(36:183),]
 msft["Time Interval"] = c(1:nrow(msft))
 ggplot(data=msft,aes(x=msft$"Time Interval",y=msft$Close))+
